@@ -1,0 +1,74 @@
+---
+title: 'Sesion 10: Causal Impact III'
+subtitle: "Master en Ciencia de Datos: Predicción"
+date: "\\textcopyright Ricardo A. Queralt @Cunef - V2.01"
+output:
+  html_notebook:
+    highlight: kate
+    toc: yes
+---
+
+```{r}
+library(tseries)
+library(ggplot2)
+library(CausalImpact)
+```
+
+```{r}
+start = "2011-01-03"
+  end = "2017-03-20"
+quote = "AdjClose"
+
+VolksWagen <- get.hist.quote(instrument = "VOW.DE", start, end, quote, compression = "w")
+BMW <- get.hist.quote(instrument = "BMW.DE", start, end, quote, compression = "w")
+Allianz <- get.hist.quote(instrument = "ALV.DE", start, end, quote, compression = "w")
+series <- cbind(VolksWagen, BMW, Allianz)
+```
+
+```{r}
+colnames(series) <- c("VolksWagen", "BMW", "Allianz")
+autoplot(series, facet = NULL) + xlab("") + ylab("Precios Valor Ajustado")
+```
+
+```{r}
+pre.period <- as.Date(c(start, "2015-09-14"))
+post.period <- as.Date(c("2015-09-21", end))
+```
+
+
+# Modelo Univariante
+
+```{r}
+impact_vw <- CausalImpact(series[, 1], pre.period, post.period, model.args = list(niter = 1000, nseasons = 52))
+plot(impact_vw)
+
+```
+
+```{r}
+summary(impact_vw)
+```
+
+# Modelo Multivariante
+
+```{r}
+impact_vw_reg <- CausalImpact(series[,1:2], pre.period, post.period, model.args = list(niter = 1000, nseasons = 52))
+plot(impact_vw_reg)
+```
+
+```{r}
+summary(impact_vw_reg)
+```
+
+
+
+```{r}
+impact_vw_reg2 <- CausalImpact(series[,1:3], pre.period, post.period, model.args = list(niter = 1000, nseasons = 52))
+plot(impact_vw_reg2)
+```
+
+
+
+```{r}
+summary(impact_vw_reg2)
+```
+

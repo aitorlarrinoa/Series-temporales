@@ -1,0 +1,107 @@
+---
+title: 'Sesion 10: Causal Impact'
+subtitle: "Master en Ciencia de Datos: Predicción"
+date: "\\textcopyright Ricardo A. Queralt @Cunef - V2.01"
+output:
+  html_notebook:
+    highlight: kate
+    toc: yes
+---
+```{r,echo=FALSE}
+library(knitr)
+library(rmarkdown)
+#html: <br> latex: \newpage
+#Para cambiar color a la fuente
+colFmt = function(x,color){
+  outputFormat = opts_knit$get("rmarkdown.pandoc.to")
+  if(outputFormat == 'latex')
+    paste("\\textcolor{",color,"}{",x,"}",sep="")
+  else if(outputFormat == 'html')
+    paste("<font color='",color,"'>",x,"</font>",sep="")
+  else
+    x
+}
+imgFmt = function(x,size){
+  outputFormat = opts_knit$get("rmarkdown.pandoc.to")
+  if(outputFormat == 'latex')
+    paste("![](",x,")",sep="")
+  else if(outputFormat == 'html')
+    paste("<img src='",x,"' width=",size,">",sep="")
+  else
+    x
+}
+
+
+```
+
+
+Bibliografía
+============
+
+
+
+- INFERRING CAUSAL IMPACT USING BAYESIAN STRUCTURAL TIME-SERIES MODELS  
+  BY KAY H. BRODERSEN, FABIAN GALLUSSER, JIM KOEHLER, NICOLAS REMY AND STEVEN L. SCOTT  
+  The Annals of Applied Statistics  
+  2015, Vol. 9, No. 1, 247–274  
+
+    [http://google.github.io/CausalImpact/CausalImpact.html](http://google.github.io/CausalImpact/CausalImpact.html)
+
+
+
+
+
+
+Análisis Causal de Impactos
+===========================
+
+<https://github.com/google/CausalImpact>  
+<https://google.github.io/CausalImpact/CausalImpact.html>
+
+
+Un problema importante en marketing es inferir la
+causalidad que una intervención de mercado, ha ejercido sobre un resultado
+medido en el tiempo. 
+
+Es un modelo de espacio de los estados  de regresión de difusa que predice cual sería la respuesta de mercado si no se produjo ninguna intervención. 
+
+A diferencia de la propuesta clásica de contrastes por diferencias
+este modelo permiten:
+ 	  (i) inferir la evolución temporal del impacto atribuible,   
+  	(ii) incorporar priores empíricos sobre los parámetros en un tratamiento totalmente bayesiano, y  
+	  (iii) acomodar flexiblemente  fuentes de variación, incluidas las tendencias locales, la estacionalidad y la influencia de las covariables contemporáneas.  
+
+Esta metodología utiliza un algoritmo MCMC para la inferencia posterior.
+
+Como ejemplo práctico estiman el efecto causal de una campaña publicitaria online sobre
+visitas del sitio. 
+
+
+
+
+
+
+![](g01.png)
+
+![](san.png)
+
+```{r}
+#devtools::install_github("google/CausalImpact")
+library(CausalImpact)
+library(tseries)
+cotizaciones <- get.hist.quote(instrument="san.mc", start= as.Date("2015-09-01"),
+                            end= as.Date("2017-03-01"), quote="AdjClose",
+                            provider="yahoo",
+                            compression="d", retclass="zoo")
+brexit <- as.Date("2016-06-23")
+impact <- CausalImpact(cotizaciones,
+                      c(min(index(cotizaciones)), brexit - 1),
+                      c(brexit, max(index(cotizaciones))))
+plot(impact, metrics = c("original", "pointwise","cumulative"))
+summary(impact)
+summary(impact, "report")
+```
+
+
+
+

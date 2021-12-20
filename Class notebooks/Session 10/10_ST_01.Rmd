@@ -1,0 +1,222 @@
+---
+title: 'Sesion 10: Causal Impact I'
+subtitle: 'Master en Ciencia de DAtos: Predicción'
+date: "\textcopyright Ricardo A. Queralt @Cunef - V2.01"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    highlight: kate
+    toc: yes
+---
+
+
+Sales
+
+Historical sales data, which covers to 2010-02-05 to 2012-11-01. You will find the following fields:
+
+Store - the store number
+
+Dept - the department number
+
+Date - the week
+
+Weekly_Sales -  sales for the given department in the given store
+
+IsHoliday - whether the week is a special holiday week
+
+
+
+
+
+
+
+```{r}
+# load required packages
+library(readr)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(xts)
+library(CausalImpact)
+```
+
+
+```{r}
+# read data
+
+sales_df <- read_csv("../data/Class/sales data-set.csv")
+
+```
+
+
+```{r}
+glimpse(sales_df)
+```
+
+```{r}
+# change variables to appropriate type
+sales_df <-
+  sales_df %>%
+  mutate(Store = as.factor(Store),
+         Dept = as.factor(Dept),
+         Date = as.Date(Date, "%d/%m/%Y"))
+
+glimpse(sales_df)
+levels(sales_df$Store)
+levels(sales_df$Dept)
+```
+
+
+
+```{r}
+
+sales_trimmed <-
+  sales_df %>%
+  filter(Store == 1,
+         Dept == 1 | Dept == 2 | Dept == 3 | Dept == 4) %>%
+  dplyr::select(-IsHoliday)
+
+glimpse(sales_trimmed)
+```
+
+
+
+```{r}
+# plot data
+options(repr.plot.width=6, repr.plot.height=3)
+
+ggplot(sales_trimmed, aes(x = Date, y = Weekly_Sales, colour = Dept)) +
+  geom_line()
+```
+
+
+
+```{r}
+sales_marketing <-
+  sales_trimmed %>%
+  filter(Date > "2010-06-01",
+         Date < "2012-06-01") %>%
+  mutate(marketing_campaign = ifelse(Dept == 4 & Date > "2012-02-28" & Date < "2012-04-01", TRUE, FALSE))
+```
+
+
+```{r}
+sales_marketing %>%
+  filter(Date > "2012-02-01" & Date < "2012-05-01",
+         Dept == 1 | Dept == 4)
+```
+
+
+
+
+```{r}
+sales_adj <-
+  sales_marketing %>%
+  mutate(adj_sales = ifelse(marketing_campaign == TRUE, 
+                            Weekly_Sales * 1.3, 
+                            Weekly_Sales))
+```
+
+
+```{r}
+sales_adj %>%
+  filter(Dept == 4 & Date > "2011-06-01") %>%
+  dplyr::select(Date, Weekly_Sales, adj_sales) %>%
+  gather(type, sales, -Date) %>%
+  ggplot(aes(x = Date, y = sales)) +
+    geom_line() +
+  ylim(30000, 70000) +
+  facet_wrap(~type, ncol = 1)
+```
+
+
+
+```{r}
+marketing_cause <-
+  sales_adj %>%
+  dplyr::select(Date, Dept, adj_sales) %>%
+  spread(Dept, adj_sales) %>%
+  rename(dept1 = 2, 
+         dept2 = 3,
+         dept3 = 4,
+         dept4 = 5) %>%
+  dplyr::select(Date, dept4, dept1, dept2, dept3)
+
+head(marketing_cause)
+```
+
+```{r}
+marketing_cause %>%
+  filter(Date > "2011-06-01") %>%
+  ggplot(aes(x = Date, y = dept4)) +
+    geom_line() +
+  ylim(30000, 70000)
+```
+
+
+
+```{r}
+marketing_xts <-
+  marketing_cause %>%
+  dplyr::select(-Date) %>%
+  as.xts(order.by = marketing_cause$Date)
+
+head(marketing_xts)
+tail(marketing_xts)
+plot(marketing_xts)
+plot(marketing_xts$dept4)
+```
+
+
+```{r}
+pre_period <- as.Date(c("2010-06-04", "2012-02-29"))
+post_period <- as.Date(c("2012-03-01", "2012-03-31"))
+```
+
+
+
+```{r}
+marketing_causal <- CausalImpact(marketing_xts, 
+                             pre.period = pre_period, 
+                             post.period = post_period)
+```
+
+
+```{r}
+summary(marketing_causal)
+plot(marketing_causal)
+plot(marketing_causal, "original")
+```
+
+
+```{r}
+summary(marketing_causal, "report")
+```
+
+
+
+
+```{r}
+model_args = list(niter = 10000,
+                  nseasons = 52,
+                  season.duration = 1)
+```
+
+
+
+```{r}
+marketing_causal_2 <- CausalImpact(marketing_xts$dept4, 
+                                 pre.period = pre_period, 
+                                 post.period = post_period,
+                                 model.args = model_args)
+```
+
+
+```{r}
+summary(marketing_causal_2)
+plot(marketing_causal_2)
+plot(marketing_causal_2, "original")
+```
+

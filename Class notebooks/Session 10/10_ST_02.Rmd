@@ -1,0 +1,121 @@
+---
+title: 'Sesion 10: Causal Impact II'
+subtitle: 'Master en Ciencia de Datos: Predicción'
+date: "\textcopyright Ricardo A. Queralt @Cunef - V2.01"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    highlight: kate
+    toc: yes
+---
+
+https://www.youtube.com/watch?v=GTgZfCltMm8
+
+
+```{r include=FALSE}
+# prep
+x <- c("rvest", "dplyr", "lubridate", "stringr", "CausalImpact", "knitr")
+purrr::walk(x, library, character.only = TRUE)
+```
+
+
+
+
+```{r}
+# fetch, clean data
+url1 <- "http://www.basketball-reference.com/teams/MEM/2013_games.html" # griz 12-13
+url2 <- "http://www.basketball-reference.com/teams/TOR/2014_games.html" # raps 13-14
+```
+
+```{r}
+griz <- read_html(url1) %>% 
+  html_table() %>% 
+  `[[`(1) %>% # don't want playoffs
+  `[`(,c("Date", "Tm", "Opp")) %>% #select() didn't work because duplicate col names
+  filter(Date!="Date") %>% # b-r dupes headers
+  mutate(Date=parse_date_time2(str_replace(Date, "^.{0,5}", ""),"mdY"), # getting rid of weekday
+    Tm=as.numeric(Tm),
+    Opp=as.numeric(Opp),
+    PtDiff=Tm-Opp,
+    Result=factor(ifelse(PtDiff > 0, "Win", "Lose")),
+    GayTrade=factor(ifelse(Date < "2013-01-30", "Before", "After"))
+  )
+head(griz)
+```
+
+
+```{r}
+raps <- read_html(url2) %>% 
+  html_table() %>% 
+  `[[`(1) %>%
+  `[`(,c("Date", "Tm", "Opp")) %>%
+  filter(Date!="Date") %>%
+  mutate(
+    Date=parse_date_time2(str_replace(Date, "^.{0,5}", ""),"mdY"),
+    Tm=as.numeric(Tm),
+    Opp=as.numeric(Opp),
+    PtDiff=Tm-Opp,
+    Result=factor(ifelse(PtDiff > 0, "Win", "Lose")),
+    GayTrade=factor(ifelse(Date < "2013-12-09", "Before", "After")) # date gay was traded
+  )
+head(raps)
+```
+
+```{r}
+# causal impact
+set.seed(1839)
+grizmodel <- CausalImpact(
+  griz$PtDiff, 
+  c(min(which(griz$GayTrade=="Before")), max(which(griz$GayTrade=="Before"))), 
+  c(min(which(griz$GayTrade=="After")), max(which(griz$GayTrade=="After"))),
+  model.args=list(niter=5000)
+)
+
+```
+
+
+
+
+
+```{r}
+
+rapsmodel <- CausalImpact(
+  raps$PtDiff, 
+  c(min(which(raps$GayTrade=="Before")), max(which(raps$GayTrade=="Before"))), 
+  c(min(which(raps$GayTrade=="After")), max(which(raps$GayTrade=="After"))),
+  model.args=list(niter=5000)
+)
+
+```
+
+```{r}
+# results, plots
+grizmodel
+summary(grizmodel, "report")
+plot(grizmodel) + ggplot2::theme_light()
+rapsmodel
+summary(rapsmodel, "report")
+plot(rapsmodel) + ggplot2::theme_light()
+```
+
+
+
+
+
+
+```{r echo=FALSE}
+grizsummary <- data.frame(Actual=c(4.4, 167.0), Prediction=c(3.6, 135.8), Difference=c(0.82, 31.22), DLB=c(-5.0, -190), DUB=c(6.6, 252.5),row.names=c("Average", "Cumulative"))
+
+kable(grizsummary, col.names=c("Actual", "Predicted", "Difference", "95% LB", "95% UB"))
+```
+
+
+```{r echo=FALSE}
+rapssummary <- data.frame(Actual=c(4.4, 279.0), Prediction=c(-0.37, -23.22), 
+                          Difference=c(4.8, 302.2), DLB=c(-0.88, -55.59), DUB=c(10, 657),
+                          row.names=c("Average", "Cumulative"))
+kable(rapssummary, col.names=c("Actual", "Predicted", "Difference", "95% LB", "95% UB"))
+```
+
