@@ -1,0 +1,222 @@
+---
+title: 'Sesión 05: Series Temporales - Intervención y Atipicos'
+subtitle: "Master en Data Science: Predicción"
+date: "\\textcopyright Ricardo A. Queralt @Cunef - V1.09"
+output:
+  html_notebook:
+    highlight: kate
+    toc: yes
+    toc_depth: 2  
+---
+
+<!--AQUI EL ESTILO CSS-->
+
+```{css, echo = FALSE}
+.redbox {
+  border: 1px solid rgb(0, 102, 102);
+  padding: 10px 10px;
+  background-color: #ffbbbb;
+    border-radius: 5px;
+}
+
+
+.hr1 {
+    display: block;
+    height: 6px;
+    border: 0;
+    border-top: 4px solid rgba(255, 69, 0, 0.7);
+    margin: 1em 0;
+    padding: 0;
+}
+
+```
+
+<!--FIN DEL ESTILO CSS-->
+
+::: {.hr1}
+:::
+
+::: {.redbox}
+Este documento ha sido preparado por Ricardo A. Queralt, profesor de Finanzas Cuantitativas para ser utilizado como material de análisis y estudio. De ninguna forma pretende ilustrar recomendaciones de actuación sobre las empresas, las situaciones, o las personas mencionadas en el documento. Las propuestas conceptuales, opiniones y análisis que aparecen en este documento son responsabilidad del autor y, por lo tanto, no necesariamente coinciden con las de CUNEF.
+
+Este documento no podrá ser reproducido, almacenado, utilizado o transmitido por ningún medio (fotocopia, copia digital, envío electrónico,...) sin autorización escrita del autor y/o CUNEF
+
+**©Ricardo A. Queralt & CUNEF.**
+:::
+
+# Librerias
+
+```{r}
+library(tidyverse)
+library(forecast)
+library(tsibble)
+library(feasts)
+library(tsoutliers)
+library(TSA)
+library(xts)
+```
+
+
+# Lectura de datos
+
+```{r}
+KO <- read.csv("ko.csv",sep=";") %>% 
+  mutate(Fecha=as.Date(as.character(Fecha),"%Y%m%d")) %>% 
+  mutate(Fecha=yearquarter(Fecha)) %>% 
+  as_tsibble(index=Fecha)
+
+KO
+
+```
+
+
+
+
+# Gráfico
+```{r}
+autoplot(KO,Ingresos)+
+  labs(title = "Ingresos CocaCola",
+       x="Trimestres")
+```
+
+
+# AutoARIMA
+
+```{r}
+#ARIMA MODEL
+modelo <- auto.arima(KO,lambda=0)
+summary(modelo)
+
+#residual analysis
+ggtsdisplay(modelo$residuals)
+
+#box-Ljung Test
+Box.test(modelo$residuals,lag=12, fitdf=3, type="Lj")
+
+# Forecast
+fKO=forecast(modelo)
+
+autoplot(fKO)+ggtitle("ARIMA: Predicción CocaCola")
+
+
+```
+
+
+# Outliers
+
+```{r}
+tso(y = as.ts(KO), types = c("AO", "LS", "TC"),discard.method = "bottom-up", tsmethod = "auto.arima", args.tsmethod = list(allowdrift = FALSE, ic = "bic"))
+
+```
+
+# Modelo  de Intervención
+
+
+```{r}
+int_data=as.ts(KO)
+dummies=data.frame(
+          LS1004=1*(seq(KO$Ingresos)>=80),
+          AO1801=1*(seq(KO$Ingresos)==109),
+          LS1901=1*(seq(KO$Ingresos)>=113),
+          AO2002=1*(seq(KO$Ingresos)==118))
+mod_int=arimax(int_data,order=c(1,0,0),
+        seasonal=list(order=c(2,1,0),period=4),
+        xreg=dummies,
+        method='ML')
+mod_int
+
+```
+
+::: {.hr1}
+:::
+
+::: {.redbox}
+Transporte Viajeros Lineas Aereas
+**9/11**
+:::
+
+```{r}
+data(airmiles)
+myData=as.zoo(airmiles)
+autoplot(log(myData))+ylab('Log(airmiles)')+xlab('Year')
+```
+
+::: {.redbox}
+Here, the transfer function consists of two parts omega0*P(t) and 
+omega1/(1-omega2*B)P(t) where the inputs of the two transfer
+functions are identical and equals the dummy variable that is 1 at September
+2001 (the 69th data point) and zero otherwise.
+xtransf is a matrix whose columns are the input variables.
+transfer is a list consisting of the pair of (AR order, MA order) of each
+transfer function, which in this examples is (0,0) and (1,0).
+
+xtransf	
+xtranf is a matrix with each column containing a covariate that affects the time series response in terms of an ARMA filter of order (p,q), i.e. if Z is one such covariate, its effect on the time series is (theta_0+theta_1B+...+theta_{q-1}B^{q-1})/(1-phi_1 B -...-phi_p B^p) Z_t In particular, if p=0 and q=1, this specifies a simple regression relationship, which should be included in xreg and not here. Note that the filter starts with zero initial values. Hence, it is pertinent to mean-delete each distributed-lag covariate, which is not done automatically.
+:::
+
+
+# Modelo sin Intervención
+
+```{r}
+air.m0=arimax(log(airmiles),order=c(0,1,1),
+        seasonal=list(order=c(0,1,1),period=12),
+        method='ML')
+air.m0
+```
+
+```{r}
+plot(log(airmiles),ylab='Log(airmiles)')
+points(fitted(air.m0))
+```
+
+
+
+# Modelo con *Intervención*
+
+```{r}
+dummies=data.frame(Dec96=1*(seq(airmiles)==12),
+                  Jan97=1*(seq(airmiles)==13),
+                  Dec02=1*(seq(airmiles)==84))
+dum_int=data.frame(I911=1*(seq(airmiles)==69),
+                    I911=1*(seq(airmiles)==69))
+
+air.m1=arimax(log(airmiles),order=c(0,1,1),
+        seasonal=list(order=c(0,1,1),period=12),
+        xtransf=dum_int,
+        transfer=list(c(0,0),c(1,0)),
+        xreg=dummies,
+        method='ML')
+air.m1
+```
+
+# Plot
+
+```{r}
+plot(log(airmiles),ylab='Log(airmiles)')
+points(fitted(air.m1))
+```
+
+
+# Plot Effect
+
+```{r}
+air.m1$coef
+
+Nine11p=1*(seq(airmiles)==69)
+plot(ts(Nine11p*(-0.0949)+
+stats::filter(Nine11p,filter=.8139,method='recursive',side=1)*(-0.2715),
+frequency=12,start=1996),type='h',ylab='9/11 Effects')
+abline(h=0)
+
+
+```
+
+
+
+::: {.redbox}
+MUCHAS GRACIAS
+
+[ricardo.queralt\@cunef.edu](mailto:ricardo.queralt@cunef.edu)
+
+**©Ricardo A. Queralt & CUNEF.**
+:::

@@ -1,0 +1,242 @@
+---
+title: 'Sesión 06: Series Temporales - Función de Transferencia'
+subtitle: "Master en Data Science: Predicción"
+date: "\\textcopyright Ricardo A. Queralt @Cunef - V1.12"
+output:
+  html_notebook:
+    highlight: kate
+    toc: yes
+    toc_depth: 2  
+---
+
+<!--AQUI EL ESTILO CSS-->
+
+```{css, echo = FALSE}
+.redbox {
+  border: 1px solid rgb(0, 102, 102);
+  padding: 10px 10px;
+  background-color: #ffbbbb;
+    border-radius: 5px;
+}
+
+
+.hr1 {
+    display: block;
+    height: 6px;
+    border: 0;
+    border-top: 4px solid rgba(255, 69, 0, 0.7);
+    margin: 1em 0;
+    padding: 0;
+}
+
+```
+
+<!--FIN DEL ESTILO CSS-->
+
+::: {.hr1}
+:::
+
+::: {.redbox}
+Este documento ha sido preparado por Ricardo A. Queralt, profesor de Finanzas Cuantitativas para ser utilizado como material de análisis y estudio. De ninguna forma pretende ilustrar recomendaciones de actuación sobre las empresas, las situaciones, o las personas mencionadas en el documento. Las propuestas conceptuales, opiniones y análisis que aparecen en este documento son responsabilidad del autor y, por lo tanto, no necesariamente coinciden con las de CUNEF.
+
+Este documento no podrá ser reproducido, almacenado, utilizado o transmitido por ningún medio (fotocopia, copia digital, envío electrónico,...) sin autorización escrita del autor y/o CUNEF
+
+**©Ricardo A. Queralt & CUNEF.**
+:::
+
+# Librerias
+
+```{r}
+library(tidyverse)
+library(tsibble)
+
+library(TSA)
+library(Hmisc)
+library(astsa)
+library(dynlm)
+library(feasts)
+```
+
+
+# Read data from 
+
+```{r}
+sales_140<-window(sales,end=140)
+lead_140<-window(lead,end=140)
+data <- cbind(sales_140,lead_140*20)
+```
+
+# Plot Data
+```{r}
+autoplot(as_tsibble(sales_140))
+autoplot(as_tsibble(lead_140))
+autoplot(as_tsibble(data))
+```
+
+
+# Estimacion v(B). Retardo 15.
+
+```{r}
+mod0=dynlm(sales_140 ~ L(lead_140, 0:15) + L(sales_140, 1))
+
+summary(mod0)
+```
+
+# ¿Son los residuos ruido blanco?
+
+```{r}
+forecast::tsdisplay(mod0$residuals)
+```
+
+# Modelizacion con ARIMAX
+
+```{r}
+mod0 <- arimax(sales_140,
+              order=c(1,0,0),
+              include.mean=TRUE,
+              xtransf=lead_140,
+              transfer=list(c(0,15)),
+              method="ML")
+
+summary(mod0)
+forecast::tsdisplay(mod0$residuals)
+```
+
+
+# Modelo en Primeras Diferencias
+
+# Diferenciacion
+
+
+
+
+```{r}
+sales_140_D <- diff(sales_140)
+lead_140_D <- diff(lead_140)
+data_D <- cbind(sales_140_D,lead_140_D)
+```
+
+
+
+# Plot Data
+
+```{r}
+autoplot(as_tsibble(sales_140_D))
+autoplot(as_tsibble(lead_140_D))
+autoplot(as_tsibble(data_D))
+```
+
+
+# Modelizacion V(B) con ARIMAX (AR(1))
+# esta es la segunda opción
+# paso 3 de los apuntes.
+
+```{r}
+mod1 <- arimax(sales_140_D,
+              order=c(1,0,0),
+              include.mean=TRUE,
+              xtransf=lead_140_D,
+              transfer=list(c(0,15)),
+              method="ML")
+
+summary(mod1)
+forecast::tsdisplay(mod1$residuals)
+```
+
+
+
+# Modelizacion V(B) con ARIMAX (AR(3))
+
+# orden del error (3,0,0). Es un autoregresivo de orden 3.
+
+```{r}
+mod2 <- arimax(sales_140_D,
+              order=c(3,0,0),
+              include.mean=TRUE,
+              xtransf=lead_140_D,
+              transfer=list(c(0,15)),
+              method="ML")
+
+summary(mod2)
+forecast::tsdisplay(mod2$residuals)
+```
+
+
+# Plot V(B) Coefficients
+# Identificación Función de Transferencia
+
+```{r}
+mod2$coef
+plot(mod2$coef[5:20],type="h")
+```
+
+
+
+# Estimación Funcion de Transferencia
+
+
+## Fixed Parameters?
+
+# y = y* + n_{t} es nuestro modelo.
+# y* es (w_{3}B^3) / (1 - \delta_{1} B) por el gráfico que hemos visto antes (estimación de b, r y s)
+# n_{t} es un AR(3)
+
+# transfer=list(c(1,3)). El 1 hace referencia a la r y 3 hace referencia a s+b.
+
+#fixed=c(NA,NA,NA,NA,0,0,0,NA) nos fija varios parámetros a 0. Los primeros 3 son de b+s. El siguiente es de \delta. Los siguientes cuatro
+# son los cieficientes de w_{i}. Antes hemos visto que w_{0} = w_{1} = w_{2} = 0.
+# El orden es AR1, AR2, AR3, \delta, w_{0}, w_{1}, w_{2}, w_{3} = c(NA,NA,NA,NA,0,0,0,NA)
+
+```{r}
+mod_p <- arimax(sales_140_D,
+              order=c(3,0,0),
+              include.mean=FALSE,
+              #fixed=c(NA,NA,NA,NA,0,0,0,NA),
+              xtransf=lead_140_D,
+              transfer=list(c(1,3)),
+              method="ML")
+
+mod_p
+```
+
+# Modelo Fixed
+
+```{r}
+mod <- arimax(sales_140_D,
+              order=c(3,0,0),
+              include.mean=FALSE,
+              fixed=c(NA,NA,NA,NA,0,0,0,NA),
+              xtransf=lead_140_D,
+              transfer=list(c(1,3)),
+              method="ML")
+
+mod
+```
+
+
+
+# Modelo Book Example
+
+
+
+```{r}
+mod_book <- arimax(sales_140_D,
+              order=c(0,0,1),
+              include.mean=TRUE,
+              fixed=c(NA,NA,NA,0,0,0,NA),
+              xtransf=lead_140_D,
+              transfer=list(c(1,3)),
+              method="ML")
+
+mod_book
+```
+
+
+
+::: {.redbox}
+MUCHAS GRACIAS
+
+[ricardo.queralt\@cunef.edu](mailto:ricardo.queralt@cunef.edu)
+
+**©Ricardo A. Queralt & CUNEF.**
+:::
